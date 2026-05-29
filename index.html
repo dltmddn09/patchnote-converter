@@ -479,8 +479,8 @@ let steamMultiResults = {};
 let steamMultiCurrentLang = '';
 
 function convertSteamMulti() {
-  const raw = document.getElementById('steam-multi-input').value.trim();
-  if (!raw) return;
+  const raw = document.getElementById('steam-multi-input').value;
+  if (!raw.trim()) return;
   const addFooter = document.getElementById('add-steam-multi-footer').checked;
 
   // 어드민툴과 동일한 언어 컬럼 구조
@@ -702,7 +702,7 @@ function runSteamConvert(raw) {
     }
 
     if (sym === '★') {
-      result.push(`[p][b]${content}[/b][/p]`);
+      result.push(`[p] [/p][p][b]${content}[/b][/p]`);
     } else if (sym === '◎') {
       result.push(`[p] [/p][p][b]${content}[/b][/p]`);
     } else if (sym === '□') {
@@ -720,12 +720,10 @@ function runSteamConvert(raw) {
       const nextMainHasSub = nextSym === '◆' && (nextNextSym === '◇' || nextNextSym === '-' || nextNextSym === '>');
 
       if (nextIsSub) {
-        // 현재 ◆가 하위를 가짐
-        if (nextSym === '◆' && nextMainHasSub) {
-          // 다음 ◆도 하위 있음 → 완전 독립
-          result.push(`[list][*][p]${content}[/p]`);
+        if (prevIsMain) {
+          // 이미 그룹 [list] 안에 있으므로 새 [list] 불필요
+          result.push(`[*][p]${content}[/p]`);
         } else {
-          // 다음 ◆는 하위 없음 → 그룹 시작 (하위 닫힌 후 그룹 계속)
           result.push(`[list][*][p]${content}[/p]`);
         }
       } else {
@@ -774,8 +772,12 @@ function runSteamConvert(raw) {
           result.push(`[list][*][p]${content}[/p][/*]`);
         } else if (nextMainIsIndependent) {
           result.push(`[list][*][p]${content}[/p][/*][/list][/*][/list]`);
-        } else {
+        } else if (nextSym === '◆') {
+          // 다음 ◆가 그룹 계속 → 외부 [list] 유지
           result.push(`[list][*][p]${content}[/p][/*][/list][/*]`);
+        } else {
+          // 섹션 끝 → 열린 [list] 전부 닫기
+          result.push(`[list][*][p]${content}[/p][/*][/list][/*][/list]`);
         }
       } else {
         if (nextIsDash) {
@@ -784,8 +786,10 @@ function runSteamConvert(raw) {
           result.push(`[*][p]${content}[/p][/*]`);
         } else if (nextMainIsIndependent) {
           result.push(`[*][p]${content}[/p][/*][/list][/*][/list]`);
-        } else {
+        } else if (nextSym === '◆') {
           result.push(`[*][p]${content}[/p][/*][/list][/*]`);
+        } else {
+          result.push(`[*][p]${content}[/p][/*][/list][/*][/list]`);
         }
       }
     } else if (sym === '-' || sym === '>') {
