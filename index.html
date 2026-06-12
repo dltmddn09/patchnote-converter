@@ -689,11 +689,15 @@ function runSteamConvert(raw) {
       // 연속된 일반 텍스트를 하나의 [p]로 묶기
       let lines = [];
       let j = i;
+      const NON_STEAM_PLATFORMS = ['\ud50c\ub808\uc774\uc2a4\ud14c\uc774\uc158', 'Xbox', 'Epic Games Store', 'Mac App Store'];
       while (j < symbols.length && !symbols[j]) {
         let text = escapeSteam(texts[j]);
         if (text.startsWith('"') || text.startsWith('\u201c')) text = text.slice(1);
         if (text.endsWith('"') || text.endsWith('\u201d')) text = text.slice(0, -1);
-        lines.push(text.trim());
+        text = text.trim();
+        if (!NON_STEAM_PLATFORMS.some(p => text.startsWith(p))) {
+          lines.push(text);
+        }
         j++;
       }
       result.push(`[p]${lines.join('\n')}[/p]`);
@@ -802,8 +806,11 @@ function runSteamConvert(raw) {
           if (nextIsSiblingOrSub) {
             // 다음이 ◇ - list만 닫고 상위 ◇[/*] 달기
             result.push(`[list][*][p]${content}[/p][/*][/list][/*]`);
+          } else if (nextSym === '◆') {
+            // 다음이 ◆ - 외부 ◆ list 유지 (남은 ◆ 항목들이 같은 그룹)
+            result.push(`[list][*][p]${content}[/p][/*][/list][/*][/list][/*]`);
           } else {
-            // 다음이 ◆ or 섹션끝 - 세 단계 모두 닫기
+            // 섹션끝 - 세 단계 모두 닫기
             result.push(`[list][*][p]${content}[/p][/*][/list][/*][/list][/*][/list]`);
           }
         } else {
@@ -813,6 +820,9 @@ function runSteamConvert(raw) {
         if (!nextIsSub) {
           if (nextIsSiblingOrSub) {
             result.push(`[*][p]${content}[/p][/*][/list][/*]`);
+          } else if (nextSym === '◆') {
+            // 다음이 ◆ - 외부 ◆ list 유지
+            result.push(`[*][p]${content}[/p][/*][/list][/*][/list][/*]`);
           } else {
             result.push(`[*][p]${content}[/p][/*][/list][/*][/list][/*][/list]`);
           }
