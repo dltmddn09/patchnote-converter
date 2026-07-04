@@ -127,8 +127,15 @@
     font-size: 12px; color: #666; margin-top: 16px;
     padding-top: 16px; border-top: 0.5px solid #2a2a2a; line-height: 1.7;
   }
+  .modal-proceed {
+    display: none; margin-top: 16px; width: 100%;
+    padding: 10px; background: #2a2a2a; color: #f0c060;
+    border: 1px solid #f0c060; border-radius: 8px; font-size: 13px;
+    font-weight: 500; cursor: pointer;
+  }
+  .modal-proceed:hover { background: #333; }
   .modal-close {
-    display: block; margin-top: 16px; width: 100%;
+    display: block; margin-top: 8px; width: 100%;
     padding: 10px; background: #e8e8e8; color: #111;
     border: none; border-radius: 8px; font-size: 13px;
     font-weight: 500; cursor: pointer;
@@ -145,13 +152,14 @@
 <!-- 모달 -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
   <div class="modal">
-    <div class="modal-title">⚠️ 줄바꿈이 포함된 셀이 감지되었습니다.</div>
-    <div class="modal-subtitle">아래 텍스트를 마우스로 선택하여 복사한 후 엑셀에서 찾아주세요.</div>
+    <div class="modal-title" id="modal-title">⚠️ 줄바꿈이 포함된 셀이 감지되었습니다.</div>
+    <div class="modal-subtitle" id="modal-subtitle">아래 텍스트를 마우스로 선택하여 복사한 후 엑셀에서 찾아주세요.</div>
     <div id="modal-items"></div>
-    <div class="modal-desc">
+    <div class="modal-desc" id="modal-desc">
       데스크탑 엑셀에서 <strong>Ctrl+H</strong> → 찾을 내용에 <strong>Ctrl+J</strong> 입력 → <strong>모두 바꾸기</strong>로 줄바꿈을 제거한 후 다시 붙여넣기 해주세요.
     </div>
-    <button class="modal-close" onclick="closeModal()">확인</button>
+    <button class="modal-proceed" id="modal-proceed" onclick="proceedModal()">계속 변환하기</button>
+    <button class="modal-close" onclick="closeModal()">닫기</button>
   </div>
 </div>
 
@@ -368,10 +376,60 @@ const FOOTER_TEMPLATES = {
   'JP': `<div> </div>\n<div><span style="color: #eed39e; font-size: 20px;"><strong style="font-weight: bold;">既知の不具合</strong></span></div>\n<div>\n<ul>\n<li>現在確認されている問題については、下記リンクよりご確認いただけます。.\n<ul>\n<li><a href="https://crimsondesert.pearlabyss.com/News/Notice/Detail?_boardNo=68" target="_blank" rel="noopener">[既知の不具合を見る]</a></li>\n</ul>\n</li>\n</ul>\n<div><!-- Template Start --><hr class="cd_tpl_divider" /><!-- Template End --></div>\n<p style="text-align: center;"><br /><!-- Template BTN - Big Parchment Start --> <a class="cd_tpl_btn_common big parchment" href="https://crimsondesert.pearlabyss.com/News/Notice/Detail?_boardNo=63" target="_blank" rel="noopener"> <!-- 버튼 배경 이미지 --> <img class="parchment_btn_bg" src="https://s1.pearlcdn.com/cd/brand/contents_cd/img/main/btn_main.png" alt="" />FAQのお知らせ</a><a class="cd_tpl_btn_common big parchment" href="https://pearlabyss.info/crimsondesertreport" target="_blank" rel="noopener"><img class="parchment_btn_bg" src="https://s1.pearlcdn.com/cd/brand/contents_cd/img/main/btn_main.png" alt="" />不具合報告</a><br /><!-- Template BTN - Big Parchment End --></p>\n</div>\n<div style="text-align: center;">ファイウェル大陸での皆さまの旅を、心より応援しております。</div>\n</div>\n<div> </div>`
 };
 
+let _modalProceedFn = null;
+
 function closeModal(event) {
   if (!event || event.target === document.getElementById('modal-overlay')) {
     document.getElementById('modal-overlay').classList.remove('show');
+    _modalProceedFn = null;
   }
+}
+
+function proceedModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+  const fn = _modalProceedFn;
+  _modalProceedFn = null;
+  if (fn) fn();
+}
+
+function detectMissingTranslations(raw) {
+  const LANG_COL_INDICES = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+  const LANG_NAMES = ['KR', 'EN', 'DE', 'ES-ES', 'ES-MX', 'FR', 'IT', 'PL', 'PT-BR', 'TR', 'RU', 'CN', 'TW', 'JP'];
+  const grouped = {};
+  const isEmpty = v => !v || !v.replace(/[\s　]/g, '');
+
+  raw.split('\n').forEach(line => {
+    const cols = line.split('\t');
+    if ((cols[2] || '').trim() === '삭제') return;
+    if (LANG_COL_INDICES.every(i => isEmpty(cols[i]))) return;
+
+    LANG_COL_INDICES.forEach((colIdx, li) => {
+      if (isEmpty(cols[colIdx])) {
+        const kr = (cols[1] || '').trim() || (cols[0] || '').trim();
+        const label = kr.length > 40 ? kr.slice(0, 40) + '...' : kr;
+        if (!grouped[LANG_NAMES[li]]) grouped[LANG_NAMES[li]] = [];
+        grouped[LANG_NAMES[li]].push(label || '(내용 없음)');
+      }
+    });
+  });
+
+  return grouped;
+}
+
+function showMissingModal(grouped, onProceed) {
+  const totalCount = Object.values(grouped).reduce((a, b) => a + b.length, 0);
+  document.getElementById('modal-title').textContent = '⚠️ 번역 누락이 감지되었습니다.';
+  document.getElementById('modal-subtitle').textContent = `총 ${totalCount}건의 누락 항목이 있습니다.`;
+  document.getElementById('modal-desc').textContent = '';
+  document.getElementById('modal-items').innerHTML = Object.entries(grouped).map(([lang, texts]) => `
+    <div class="modal-item">
+      <div class="modal-item-lang">[${lang}] ${texts.length}건 누락</div>
+      <div class="modal-item-kr">${texts.map(t => '• ' + t).join('<br>')}</div>
+    </div>
+  `).join('');
+  document.getElementById('modal-proceed').style.display = 'block';
+  _modalProceedFn = onProceed;
+  document.getElementById('modal-overlay').classList.add('show');
 }
 
 function switchMode(mode) {
@@ -478,7 +536,7 @@ Teşekkür ederiz.[/p][p] [/p]`,
 let steamMultiResults = {};
 let steamMultiCurrentLang = '';
 
-function convertSteamMulti() {
+function convertSteamMulti(skipCheck) {
   const raw = document.getElementById('steam-multi-input').value;
   if (!raw.trim()) return;
   const addFooter = document.getElementById('add-steam-multi-footer').checked;
@@ -520,8 +578,11 @@ function convertSteamMulti() {
   }
 
   if (problematicItems.length > 0) {
-    const itemsEl = document.getElementById('modal-items');
-    itemsEl.innerHTML = problematicItems.map(item => `
+    document.getElementById('modal-title').textContent = '⚠️ 줄바꿈이 포함된 셀이 감지되었습니다.';
+    document.getElementById('modal-subtitle').textContent = '아래 텍스트를 마우스로 선택하여 복사한 후 엑셀에서 찾아주세요.';
+    document.getElementById('modal-desc').innerHTML = '데스크탑 엑셀에서 <strong>Ctrl+H</strong> → 찾을 내용에 <strong>Ctrl+J</strong> 입력 → <strong>모두 바꾸기</strong>로 줄바꿈을 제거한 후 다시 붙여넣기 해주세요.';
+    document.getElementById('modal-proceed').style.display = 'none';
+    document.getElementById('modal-items').innerHTML = problematicItems.map(item => `
       <div class="modal-item">
         <div class="modal-item-kr">${item.kr}</div>
         <div class="modal-item-lang">${item.lang} 열에서 줄바꿈 감지</div>
@@ -531,14 +592,26 @@ function convertSteamMulti() {
     return;
   }
 
+  if (!skipCheck) {
+    const missing = detectMissingTranslations(raw);
+    if (Object.keys(missing).length > 0) {
+      showMissingModal(missing, () => convertSteamMulti(true));
+      return;
+    }
+  }
+
   const LANG_COLS = ['KR','_','EN','DE','ES-ES','ES-MX','FR','IT','PL','PT-BR','TR','RU','CN','TW','JP'];
   const lines = raw.split('\n');
   const langData = {};
   LANG_COLS.forEach(l => { if (l !== '_') langData[l] = []; });
 
+  const KR_NON_STEAM_PREFIXES = ['플레이스테이션', 'Xbox', 'Epic Games Store', 'Mac App Store'];
   lines.forEach(line => {
     const cols = line.split('\t');
+    if ((cols[2] || '').trim() === '삭제') return;
     const sym = cols[0] ? cols[0].trim() : '';
+    const krText = (cols[1] || '').trim();
+    if (!sym && KR_NON_STEAM_PREFIXES.some(p => krText.startsWith(p))) return;
     LANG_COLS.forEach((lang, idx) => {
       if (lang === '_') return;
       const text = cols[idx + 1] ? cols[idx + 1].trim() : '';
@@ -689,7 +762,7 @@ function runSteamConvert(raw) {
       // 연속된 일반 텍스트를 하나의 [p]로 묶기
       let lines = [];
       let j = i;
-      const NON_STEAM_PLATFORMS = ['\ud50c\ub808\uc774\uc2a4\ud14c\uc774\uc158', 'Xbox', 'Epic Games Store', 'Mac App Store'];
+      const NON_STEAM_PLATFORMS = ['\ud50c\ub808\uc774\uc2a4\ud14c\uc774\uc158', 'PlayStation', 'Xbox', 'Epic Games Store', 'Mac App Store'];
       while (j < symbols.length && !symbols[j]) {
         let text = escapeSteam(texts[j]);
         if (text.startsWith('"') || text.startsWith('\u201c')) text = text.slice(1);
@@ -946,7 +1019,7 @@ function convertLines(symbols, texts, addDiv) {
       }
     } else if (level === 2) {
       if (nextLevel === 3) {
-        result.push(`<li>${content}`);
+        result.push(`<li>${content}<ul>`);
       } else if (nextLevel <= 1) {
         result.push(`<li>${content}</li></ul></li></ul>`);
       } else {
@@ -954,7 +1027,7 @@ function convertLines(symbols, texts, addDiv) {
       }
     } else if (level === 3) {
       if (nextLevel === 4) {
-        result.push(`<ul><li>${content}`);
+        result.push(`<li>${content}<ul>`);
       } else if (nextLevel === 3) {
         result.push(`<li>${content}`);
       } else if (nextLevel === 2) {
@@ -984,7 +1057,9 @@ function convertLines(symbols, texts, addDiv) {
 // ── 단일 변환 ──
 function convert() {
   const raw = document.getElementById('input').value;
-  const lines = raw.split('\n').filter(l => l.trim().length > 0);
+  const lines = raw.split('\n')
+    .filter(l => l.trim().length > 0)
+    .filter(l => { const c = l.split('\t'); return (c[2] || '').trim() !== '삭제'; });
   const symbols = lines.map(l => {
     const cols = l.split('\t');
     return getSymbol(cols[0]);
@@ -1019,7 +1094,7 @@ function clearAll() {
 }
 
 // ── 다국어 변환 ──
-function convertMulti() {
+function convertMulti(skipCheck) {
   const raw = document.getElementById('multi-input').value;
   const addDiv = document.getElementById('add-div-multi').checked;
 
@@ -1064,8 +1139,11 @@ function convertMulti() {
   }
 
   if (problematicItems.length > 0) {
-    const itemsEl = document.getElementById('modal-items');
-    itemsEl.innerHTML = problematicItems.map(item => `
+    document.getElementById('modal-title').textContent = '⚠️ 줄바꿈이 포함된 셀이 감지되었습니다.';
+    document.getElementById('modal-subtitle').textContent = '아래 텍스트를 마우스로 선택하여 복사한 후 엑셀에서 찾아주세요.';
+    document.getElementById('modal-desc').innerHTML = '데스크탑 엑셀에서 <strong>Ctrl+H</strong> → 찾을 내용에 <strong>Ctrl+J</strong> 입력 → <strong>모두 바꾸기</strong>로 줄바꿈을 제거한 후 다시 붙여넣기 해주세요.';
+    document.getElementById('modal-proceed').style.display = 'none';
+    document.getElementById('modal-items').innerHTML = problematicItems.map(item => `
       <div class="modal-item">
         <div class="modal-item-kr">${item.kr}</div>
         <div class="modal-item-lang">${item.lang} 열에서 줄바꿈 감지</div>
@@ -1078,9 +1156,18 @@ function convertMulti() {
   // 탭으로 열 분리, 빈 행 무시
   const rows = raw.split('\n')
     .map(l => l.split('\t'))
-    .filter(cols => cols.some(c => c.trim().length > 0));
+    .filter(cols => cols.some(c => c.trim().length > 0))
+    .filter(cols => (cols[2] || '').trim() !== '삭제');
 
   if (rows.length === 0) return;
+
+  if (!skipCheck) {
+    const missing = detectMissingTranslations(raw);
+    if (Object.keys(missing).length > 0) {
+      showMissingModal(missing, () => convertMulti(true));
+      return;
+    }
+  }
 
   // 열 수 확인: 1열(부호) + 2열(KR) + 3열(구분 - 스킵) + 4열~(EN, DE, ...)
   // 언어는 4열부터: index 3(EN), 4(DE), ...
